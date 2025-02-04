@@ -1,0 +1,12 @@
+*.pyc
+__pycache__/
+
+# Ignore environment folders
+venv/
+node_modules/
+.venv/
+
+data/*
+!data/.gitkeep
+visualizations/*
+!visualizations/.gitkeep
