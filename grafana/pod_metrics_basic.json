@@ -1,0 +1,79 @@
+{
+    "dashboard": {
+      "id": null,
+      "uid": "http-metrics",
+      "title": "HTTP & Pod Metrics",
+      "tags": ["Prometheus", "Kubernetes"],
+      "timezone": "browser",
+      "schemaVersion": 30,
+      "version": 1,
+      "panels": [
+        {
+          "title": "HTTP Request Success Rate per Pod (%)",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{status!~\"5..\"}[5m])) by (pod) / sum(rate(http_requests_total[5m])) by (pod) * 100",
+              "legendFormat": "{{ pod }}",
+              "interval": "5m"
+            }
+          ]
+        },
+        {
+          "title": "Total HTTP Requests per Pod",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total[5m])) by (pod)",
+              "legendFormat": "{{ pod }}",
+              "interval": "5m"
+            }
+          ]
+        },
+        {
+          "title": "CPU Usage per Pod (Cores)",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total[5m])) by (pod)",
+              "legendFormat": "{{ pod }}",
+              "interval": "5m"
+            }
+          ]
+        },
+        {
+          "title": "Memory Usage per Pod (Bytes)",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "sum(container_memory_usage_bytes) by (pod)",
+              "legendFormat": "{{ pod }}"
+            }
+          ]
+        },
+        {
+          "title": "Network Traffic (Received) per Pod",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "sum(rate(container_network_receive_bytes_total[5m])) by (pod)",
+              "legendFormat": "{{ pod }}",
+              "interval": "5m"
+            }
+          ]
+        },
+        {
+          "title": "Network Traffic (Transmitted) per Pod",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "sum(rate(container_network_transmit_bytes_total[5m])) by (pod)",
+              "legendFormat": "{{ pod }}",
+              "interval": "5m"
+            }
+          ]
+        }
+      ]
+    }
+  }
+  
