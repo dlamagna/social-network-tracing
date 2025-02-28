@@ -7,6 +7,7 @@ import subprocess
 import json
 import os
 from typing import Dict
+import time
 
 from utils import (
     verify_prometheus_connection, 
@@ -17,18 +18,25 @@ from utils import (
 from ssh_utils import manage_tunnels_with_port_forward
 from keys import SSH_TUNNELS, SSH_USER, SSH_HOST
 
-wrk2_dir = "../../wrk2/"
-wrk2_script = "../wrk2/scripts/social-network/compose-post.lua"
-prometheus_url = "http://localhost:9090"
-nginx_url = "http://localhost:8080"
-jaeger_url = "http://localhost:16686"
+BEFORE_AFTER_QUERY_LAG = 20
+
+# PREREQUISITES:
+# 1. install wrk
+# 2. have jaeger, prometheus, nginx port forward terminals open
+
+wrk2_dir = "~/projects/DeathStarBench/wrk2/wrk2/"
+wrk2_script = "~/projects/DeathStarBench/socialNetwork/wrk2/scripts/social-network/compose-post.lua"
+
+nginx_url = "http://172.20.0.4:30221"
+prometheus_url = f"http://172.20.0.4:31721"
+jaeger_url = f"http://172.20.0.4:31354"
 
 test_params = {
     "threads": 1,
-    "connections": 500,
-    "duration": "30s",
-    "rate": 60,
-    "url": f"{nginx_url}/wrk2/test"
+    "connections": 10,
+    "duration": "60s",
+    "rate": 80,
+    "url": f"{nginx_url}/wrk2-api/post/compose"
 }
 
 visualisation_output_dir = "visualizations"
@@ -37,20 +45,7 @@ metrics_output_dir = "data"
 for output_dir in metrics_output_dir, visualisation_output_dir:
     os.makedirs(output_dir, exist_ok=True)
 
-
-# <prometheus-url> : localhost:9090
-# <social-network-endpoint> : localhost:8082
-
-
-
-
-# Define Prometheus queries
 from prom_queries import PROMETHEUS_QUERIES
-
-# queries = {
-#     "network_receive": "rate(node_network_receive_bytes_total[1m])",
-#     "network_transmit": "rate(node_network_transmit_bytes_total[1m])"
-# }
 
 # Fetch metrics
 def fetch_metrics(prom:PrometheusConnect, query, start_time, end_time):
@@ -107,6 +102,8 @@ def plot_metrics(metrics_df, title, output_file=None):
 def run_wrk2_test(test_params):
     command_list = [
         f"{wrk2_dir}/wrk",
+        # "-D exp",
+        "-L",
         f"-t {test_params['threads']}",
         f"-c {test_params['connections']}",
         f"-d {test_params['duration']}",
@@ -128,7 +125,7 @@ def serve_visualizations(visualisation_output_dir, port=8082):
     os.chdir(visualisation_output_dir)
     handler = http.server.SimpleHTTPRequestHandler
     httpd = socketserver.TCPServer(("", port), handler)
-    print(f"Serving at http://localhost:{port}",flush=True)
+    print(f"Serving fat http://{nginx_ip}:{port}",flush=True)
     httpd.serve_forever()
 
 def connect_to_prometheus():
@@ -153,6 +150,7 @@ def save_wrk2_outputs():
     with open(f"{visualisation_output_dir}/wrk2_output.json", "w") as f:
         json.dump(wrk2_output, f)
     print("Complete, output saved to ",f"{visualisation_output_dir}/wrk2_output.json",flush=True)
+    return wrk2_output
 
 def run_prom_requests(prom, prom_queries:Dict[str, str], start_time, end_time):
     # Fetch and process metrics for all queries
@@ -246,23 +244,28 @@ def save_metrics_and_visualizations(prom, service_queries, start_time, end_time)
                     print(f"No metrics found for service '{service}', metric '{metric_name}'.", flush=True)
             except Exception as e:
                 print(f"Error processing metrics for service '{service}', metric '{metric_name}': {e}", flush=True)
+            
+            time.sleep(1)
 
 def main():
     # Connect to Prometheus
     prom = connect_to_prometheus()
     
+    # Run wrk2 tests 
+    start_time = datetime.now() - timedelta(seconds=BEFORE_AFTER_QUERY_LAG)
+    output_str = save_wrk2_outputs()
+    end_time = datetime.now() + timedelta(seconds=BEFORE_AFTER_QUERY_LAG)
+    print("Completed! \n", output_str[:326])
+    print(f"Now waiting for {BEFORE_AFTER_QUERY_LAG}s to allow time for prometheus scraping..")
+    time.sleep(BEFORE_AFTER_QUERY_LAG)
     # Collect Jaeger map
     network_dict = save_jaeger_network_map()
     # Extract services from Jaeger network map
     services = extract_services_from_network_map(network_dict)
     print(f"Services extracted: {services}", flush=True)
-
-    # Run wrk2 tests 
-    start_time = datetime.now() - timedelta(seconds=10)
-    save_wrk2_outputs()
-    end_time = datetime.now() + timedelta(seconds=10)
-
+    
     service_queries = generate_prometheus_queries_for_services(services, PROMETHEUS_QUERIES)
+
     save_metrics_and_visualizations(prom, service_queries, start_time, end_time)
 
 
