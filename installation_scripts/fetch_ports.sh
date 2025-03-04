@@ -25,9 +25,30 @@ else
     ISTIO_INGRESS_PORT=$(sudo kubectl get svc "$ISTIO_INGRESS_NAME" -n istio-system -o jsonpath='{.spec.ports[?(@.port==80)].nodePort}')
 fi
 
-# Output SSH command for port forwarding
+# Export Environment Variables for Node IP and NodePort Combos
 echo ""
 echo "=========================================="
+echo "Exporting Node IP and NodePort combinations as environment variables..."
+export NGINX_URL="http://${NODE_IP}:${NGINX_PORT}"
+export PROMETHEUS_URL="http://${NODE_IP}:${PROMETHEUS_PORT}"
+export JAEGER_URL="http://${NODE_IP}:${JAEGER_PORT}"
+export GRAFANA_URL="http://${NODE_IP}:${GRAFANA_PORT}"
+export KIALI_URL="http://${NODE_IP}:${KIALI_PORT}"
+export ISTIO_INGRESS_URL="http://${NODE_IP}:${ISTIO_INGRESS_PORT}"
+
+echo "export NGINX_URL=${NGINX_URL}"
+echo "export PROMETHEUS_URL=${PROMETHEUS_URL}"
+echo "export JAEGER_URL=${JAEGER_URL}"
+echo "export GRAFANA_URL=${GRAFANA_URL}"
+echo "export KIALI_URL=${KIALI_URL}"
+echo "export ISTIO_INGRESS_URL=${ISTIO_INGRESS_URL}"
+echo ""
+echo "Environment variables set for Python script integration."
+echo "=========================================="
+
+# Output SSH command for port forwarding
+# echo ""
+# echo "=========================================="
 echo ""
 echo "Use the following SSH command to access the services from your laptop:"
 echo ""
@@ -35,18 +56,6 @@ echo "ssh -L 8080:${NODE_IP}:${NGINX_PORT} -L 9090:${NODE_IP}:${PROMETHEUS_PORT}
 echo ""
 echo "=========================================="
 
-# Output NodePort Access URLs
-echo ""
-echo "Access the services directly using Node IP and NodePort:"
-echo ""
-echo "NGINX: http://${NODE_IP}:${NGINX_PORT}"
-echo "Prometheus: http://${NODE_IP}:${PROMETHEUS_PORT}"
-echo "Jaeger: http://${NODE_IP}:${JAEGER_PORT}"
-echo "Grafana: http://${NODE_IP}:${GRAFANA_PORT}"
-echo "Kiali: http://${NODE_IP}:${KIALI_PORT}"
-echo "Istio Ingress Gateway: http://${NODE_IP}:${ISTIO_INGRESS_PORT}"
-echo ""
-echo "=========================================="
 
 # Output Localhost Access URLs after SSH Port Forwarding
 echo ""
