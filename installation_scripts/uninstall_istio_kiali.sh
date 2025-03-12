@@ -11,13 +11,13 @@ sudo kubectl delete -f https://raw.githubusercontent.com/istio/istio/release-1.1
 
 # Step 2: Uninstall Istio using Helm
 echo "Uninstalling Istio components..."
-sudo helm uninstall istio-ingress -n istio-system || true
-sudo helm uninstall istiod -n istio-system || true
-sudo helm uninstall istio-base -n istio-system || true
+sudo helm uninstall istio-ingress -n monitoring || true
+sudo helm uninstall istiod -n monitoring || true
+sudo helm uninstall istio-base -n monitoring || true
 
 # Step 3: Delete Istio Namespaces
-echo "Deleting Istio namespaces..."
-sudo kubectl delete namespace istio-system || true
+# echo "Deleting Istio namespaces..."
+# sudo kubectl delete namespace monitoring || true
 
 # Step 4: Clean up Istio CRDs
 echo "Cleaning up Istio CRDs..."
