@@ -195,19 +195,17 @@ def extract_services_from_network_map(network_map):
     return services
 
 def generate_prometheus_queries_for_services(services, base_queries):
-    """
-    Generates Prometheus queries for each service.
-    :param services: Set of service names.
-    :param base_queries: Dictionary of base Prometheus queries.
-    :return: A dictionary where keys are service names and values are their queries.
-    """
     service_queries = {}
     for service in services:
         service_queries[service] = {}
         for metric_name, base_query in base_queries.items():
-            # Replace the placeholder "pod" with the actual service name
-            service_queries[service][metric_name] = base_query.replace("pod=~", f'pod=~"{service}"')
+            # Don't mutate regex-based queries for replicas
+            if metric_name.startswith("replicas_"):
+                service_queries[service][metric_name] = base_query
+            else:
+                service_queries[service][metric_name] = base_query.replace("pod=~", f'pod=~"{service}"')
     return service_queries
+
 
 def save_metrics_and_visualizations(prom: PrometheusConnect, service_queries, start_time, end_time):
     """
