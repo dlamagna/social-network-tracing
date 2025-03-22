@@ -1,5 +1,6 @@
 *.pyc
 __pycache__/
+.git
 
 # Ignore environment folders
 venv/
@@ -10,3 +11,5 @@ data/*
 !data/.gitkeep
 visualizations/*
 !visualizations/.gitkeep
+tmp/
+dev/
