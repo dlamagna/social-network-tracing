@@ -13,7 +13,8 @@ from utils import (
     verify_prometheus_connection, 
     get_current_utc_timestamp, 
     get_jaeger_network_map,
-    visualize_network_map
+    visualize_network_map,
+    run_fetch_ports_script,
 )
 from ssh_utils import manage_tunnels_with_port_forward
 from keys import SSH_TUNNELS, SSH_USER, SSH_HOST
@@ -27,9 +28,11 @@ BEFORE_AFTER_QUERY_LAG = 20
 wrk2_dir = "~/projects/DeathStarBench/wrk2/wrk2/"
 wrk2_script = "~/projects/DeathStarBench/socialNetwork/wrk2/scripts/social-network/compose-post.lua"
 
-nginx_url = "http://172.20.0.4:30221"
-prometheus_url = f"http://172.20.0.4:31721"
-jaeger_url = f"http://172.20.0.4:31354"
+# # Fetch URLs from environment variables
+run_fetch_ports_script()
+nginx_url = os.environ.get("NGINX_URL")
+prometheus_url = os.environ.get("PROMETHEUS_URL")
+jaeger_url = os.environ.get("JAEGER_URL")
 
 test_params = {
     "threads": 1,
@@ -48,16 +51,20 @@ for output_dir in metrics_output_dir, visualisation_output_dir:
 from prom_queries import PROMETHEUS_QUERIES
 
 # Fetch metrics
-def fetch_metrics(prom:PrometheusConnect, query, start_time, end_time):
-    result = prom.custom_query_range(
-        query=query,
-        start_time=start_time,
-        end_time=end_time,
-        step="15s"
-    )
-    msg = f"Query: {query}, Start: {start_time}, End: {end_time}"
-
-    return result, msg
+def fetch_metrics(prom: PrometheusConnect, query, start_time=None, end_time=None):
+    try:
+        if "[5m]" in query or "[2m]" in query or "rate(" in query or "histogram_quantile(" in query:
+            result = prom.custom_query_range(
+                query=query,
+                start_time=start_time,
+                end_time=end_time,
+                step="15s"
+            )
+        else:
+            result = prom.custom_query(query)
+        return result, "OK"
+    except Exception as e:
+        return None, str(e)
 
 # Process data
 def process_metrics(result, msg):
@@ -125,7 +132,7 @@ def serve_visualizations(visualisation_output_dir, port=8082):
     os.chdir(visualisation_output_dir)
     handler = http.server.SimpleHTTPRequestHandler
     httpd = socketserver.TCPServer(("", port), handler)
-    print(f"Serving fat http://{nginx_ip}:{port}",flush=True)
+    print(f"Serving fat {nginx_url}",flush=True)
     httpd.serve_forever()
 
 def connect_to_prometheus():
@@ -202,7 +209,7 @@ def generate_prometheus_queries_for_services(services, base_queries):
             service_queries[service][metric_name] = base_query.replace("pod=~", f'pod=~"{service}"')
     return service_queries
 
-def save_metrics_and_visualizations(prom, service_queries, start_time, end_time):
+def save_metrics_and_visualizations(prom: PrometheusConnect, service_queries, start_time, end_time):
     """
     Fetches metrics for each service and saves data and visualizations.
     :param prom: Prometheus connection object.
