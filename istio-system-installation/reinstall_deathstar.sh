@@ -114,7 +114,6 @@ sudo helm install nginx-prometheus-exporter prometheus-community/prometheus-ngin
 echo "✅ nginx-prometheus-exporter deployed."
 
 # 9️⃣ Deploy Kiali and enable telemetry
-sudo kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.17/samples/addons/kiali.yaml -n $ISTIO_NAMESPACE
 sudo kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.17/samples/addons/jaeger.yaml -n $ISTIO_NAMESPACE
 
 cat <<EOF | sudo kubectl apply -n $ISTIO_NAMESPACE -f -
@@ -172,48 +171,67 @@ NODE_IP=$(sudo kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.ty
 NGINX_PORT=$(sudo kubectl get svc nginx-thrift -n $DEATHSTAR_NAMESPACE -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "N/A")
 PROMETHEUS_PORT=$(sudo kubectl get svc prometheus-server -n $ISTIO_NAMESPACE -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "N/A")
 JAEGER_PORT=$(sudo kubectl get svc jaeger -n $DEATHSTAR_NAMESPACE -o jsonpath='{.spec.ports[?(@.port==16686)].nodePort}' 2>/dev/null || echo "N/A")
-GRAFANA_PORT=$(sudo kubectl get svc grafana -n $ISTIO_NAMESPACE -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "N/A")
-KIALI_PORT=$(sudo kubectl get svc kiali -n $ISTIO_NAMESPACE -o jsonpath='{.spec.ports[?(@.port==20001)].nodePort}' 2>/dev/null || echo "N/A")
 
 echo "🎯 Deployment Complete!"
 
-if [ "$KIALI_PORT" == "N/A" ]; then
-    sudo kubectl patch svc kiali -n $ISTIO_NAMESPACE -p '{"spec": {"type": "NodePort"}}' >/dev/null 2>&1
-    sleep 3
-    KIALI_PORT=$(sudo kubectl get svc kiali -n $ISTIO_NAMESPACE -o jsonpath='{.spec.ports[?(@.port==20001)].nodePort}' 2>/dev/null || echo "N/A")
-fi
-
-# Get Istio Ingress Gateway NodePort
-ISTIO_INGRESS_NAME=$(sudo kubectl get svc -n $ISTIO_NAMESPACE -o jsonpath='{.items[?(@.metadata.name=="istio-ingressgateway")].metadata.name}' 2>/dev/null || echo "")
-
-if [ -z "$ISTIO_INGRESS_NAME" ]; then
-    ISTIO_INGRESS_PORT="N/A"
-else
-    ISTIO_INGRESS_PORT=$(sudo kubectl get svc "$ISTIO_INGRESS_NAME" -n $ISTIO_NAMESPACE -o jsonpath='{.spec.ports[?(@.port==80)].nodePort}' 2>/dev/null || echo "N/A")
-fi
-
-# Change Local Port for Istio Ingress Gateway (Replace 80 → 8081)
-LOCAL_ISTIO_PORT=8081
 
 # Print the URLs in a clean format (keeping the original output structure)
 echo "NGINX_URL=http://${NODE_IP}:${NGINX_PORT}"
 echo "PROMETHEUS_URL=http://${NODE_IP}:${PROMETHEUS_PORT}"
 echo "JAEGER_URL=http://${NODE_IP}:${JAEGER_PORT}"
+
+#### UPDATE kiali config with correct nodeport for prometheus
+
+#!/bin/bash
+
+echo "Installing Kiali via Helm with anonymous auth, Prometheus URL, and NodePort service..."
+sudo helm install kiali-server \
+  --namespace ${ISTIO_NAMESPACE} \
+  --set auth.strategy="anonymous" \
+  --set external_services.prometheus.url="http://${NODE_IP}:${PROMETHEUS_PORT}" \
+  --set kiali.service.type=NodePort \
+  --repo https://kiali.org/helm-charts \
+  kiali-server
+
+echo "Waiting for the Kiali pod to be ready..."
+sleep 30  # Adjust the sleep duration as needed
+
+echo "Retrieving Kiali pod status:"
+sudo kubectl get pods -n ${ISTIO_NAMESPACE} -l app=kiali
+
+SERVICE_TYPE=$(sudo kubectl get svc kiali -n "${ISTIO_NAMESPACE}" -o jsonpath='{.spec.type}')
+if [ "$SERVICE_TYPE" != "NodePort" ]; then
+    sudo kubectl patch svc kiali -n "${ISTIO_NAMESPACE}" -p '{"spec": {"type": "NodePort"}}'
+    sleep 5
+fi
+SERVICE_TYPE=$(sudo kubectl get svc kiali -n "${ISTIO_NAMESPACE}" -o jsonpath='{.spec.type}')
+
+echo "Updated Kiali service type is: ${SERVICE_TYPE}"
+echo "KIALI_URL=http://${NODE_IP}:${KIALI_PORT}"
+
+# Retrieve NodePorts for Grafana and Kiali services
+GRAFANA_PORT=$(sudo kubectl get svc grafana -n ${ISTIO_NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "N/A")
+KIALI_PORT=$(sudo kubectl get svc kiali -n ${ISTIO_NAMESPACE} -o jsonpath='{.spec.ports[?(@.port==20001)].nodePort}' 2>/dev/null || echo "N/A")
+
+echo "🎯 Deployment Complete!"
+
+# Get Istio Ingress Gateway NodePort
+ISTIO_INGRESS_NAME=$(sudo kubectl get svc -n ${ISTIO_NAMESPACE} -o jsonpath='{.items[?(@.metadata.name=="istio-ingressgateway")].metadata.name}' 2>/dev/null || echo "")
+if [ -z "$ISTIO_INGRESS_NAME" ]; then
+    ISTIO_INGRESS_PORT="N/A"
+else
+    ISTIO_INGRESS_PORT=$(sudo kubectl get svc "$ISTIO_INGRESS_NAME" -n ${ISTIO_NAMESPACE} -o jsonpath='{.spec.ports[?(@.port==80)].nodePort}' 2>/dev/null || echo "N/A")
+fi
+
+# Change Local Port for Istio Ingress Gateway (Replace 80 → 8081)
+LOCAL_ISTIO_PORT=8081
+
+echo "-----"
 echo "GRAFANA_URL=http://${NODE_IP}:${GRAFANA_PORT}"
 echo "KIALI_URL=http://${NODE_IP}:${KIALI_PORT}"
 echo "ISTIO_INGRESS_URL=http://${NODE_IP}:${LOCAL_ISTIO_PORT}"
 
-#### UPDATE kiali config with correct nodeport for prometheus
 
-cat <<EOF | sudo kubectl apply -n istio-system -f -
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: kiali
-  namespace: istio-system
-data:
-  config.yaml: |
-    external_services:
-      prometheus:
-        url: "http://${NODE_IP}:${PROMETHEUS_PORT}"
-EOF
+sleep 60
+source .venv/bin/activate
+python3 tracer.py
