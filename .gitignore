@@ -11,5 +11,7 @@ data/*
 !data/.gitkeep
 visualizations/*
 !visualizations/.gitkeep
+aggregate/*
+!aggregate/.gitkeep
 tmp/
 dev/
