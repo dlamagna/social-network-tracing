@@ -4,7 +4,9 @@
 set -e
 
 echo "🌐 Fetching Node IPs and NodePorts..."
-
+USER="dlamagna"
+SERVER=""
+PORT=""
 # Set correct namespaces
 DEATHSTAR_NAMESPACE="socialnetwork"
 ISTIO_NAMESPACE="istio-system"
@@ -66,7 +68,7 @@ echo "=========================================="
 echo ""
 echo "Use the following SSH command to access the services from your laptop:"
 echo ""
-echo "ssh -L 8080:${NODE_IP}:${NGINX_PORT} -L 9090:${NODE_IP}:${PROMETHEUS_PORT} -L 16686:${NODE_IP}:${JAEGER_PORT} -L 3000:${NODE_IP}:${GRAFANA_PORT} -L 20001:${NODE_IP}:${KIALI_PORT} -L ${LOCAL_ISTIO_PORT}:${NODE_IP}:${ISTIO_INGRESS_PORT} -X dlamagna@147.83.130.183 -p 13000"
+echo "ssh -L 8080:${NODE_IP}:${NGINX_PORT} -L 9090:${NODE_IP}:${PROMETHEUS_PORT} -L 16686:${NODE_IP}:${JAEGER_PORT} -L 3000:${NODE_IP}:${GRAFANA_PORT} -L 20001:${NODE_IP}:${KIALI_PORT} -L ${LOCAL_ISTIO_PORT}:${NODE_IP}:${ISTIO_INGRESS_PORT} -X ${USER}@${SERVER} -p ${PORT}"
 echo ""
 echo "=========================================="
 
