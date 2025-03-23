@@ -4,6 +4,9 @@ import requests
 import json
 import networkx as nx
 import matplotlib.pyplot as plt
+import os
+import subprocess
+import re
 
 def visualize_network_map(network_map, save_path=None):
     G = nx.DiGraph()
@@ -128,3 +131,37 @@ def verify_prometheus_connection(prom: PrometheusConnect, msg=False):
         if msg:
             print(f"Failed to connect to Prometheus: {e}")
         return False
+    
+def run_fetch_ports_script(script_path="istio-system-installation/py_fetch_ports.sh"):
+    """
+    Run the fetch_ports.sh script and source the environment variables.
+    """
+    # Step 1: Run the script and capture the output
+    result = subprocess.run(
+        ["bash", script_path],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+    
+    # Step 2: Check for errors
+    if result.returncode != 0:
+        print(f"Error running {script_path}: {result.stderr}")
+        return
+
+    # Step 3: Parse environment variables from the output
+    env_vars = {}
+    for line in result.stdout.splitlines():
+        # Only process lines containing '='
+        if "=" in line:
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            env_vars[key] = value
+    
+    # Step 4: Update the Python environment
+    os.environ.update(env_vars)
+    
+    print("Environment variables set:")
+    for key, value in env_vars.items():
+        print(f"  {key} = {value}")

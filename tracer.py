@@ -7,28 +7,39 @@ import subprocess
 import json
 import os
 from typing import Dict
+import time
 
 from utils import (
     verify_prometheus_connection, 
     get_current_utc_timestamp, 
     get_jaeger_network_map,
-    visualize_network_map
+    visualize_network_map,
+    run_fetch_ports_script,
 )
 from ssh_utils import manage_tunnels_with_port_forward
 from keys import SSH_TUNNELS, SSH_USER, SSH_HOST
 
-wrk2_dir = "../../wrk2/"
-wrk2_script = "../wrk2/scripts/social-network/compose-post.lua"
-prometheus_url = "http://localhost:9091"
-nginx_url = "http://localhost:8082"
-jaeger_url = "http://localhost:16687"
+BEFORE_AFTER_QUERY_LAG = 20
+
+# PREREQUISITES:
+# 1. install wrk
+# 2. have jaeger, prometheus, nginx port forward terminals open
+
+wrk2_dir = "~/projects/DeathStarBench/wrk2/wrk2/"
+wrk2_script = "~/projects/DeathStarBench/socialNetwork/wrk2/scripts/social-network/compose-post.lua"
+
+# # Fetch URLs from environment variables
+run_fetch_ports_script()
+nginx_url = os.environ.get("NGINX_URL")
+prometheus_url = os.environ.get("PROMETHEUS_URL")
+jaeger_url = os.environ.get("JAEGER_URL")
 
 test_params = {
-    "threads": 4,
-    "connections": 100,
-    "duration": "60s",
-    "rate": 2000,
-    "url": f"{nginx_url}/wrk2/test"
+    "threads": 1,
+    "connections": 10,
+    "duration": "120s",
+    "rate": 80,
+    "url": f"{nginx_url}/wrk2-api/post/compose"
 }
 
 visualisation_output_dir = "visualizations"
@@ -37,47 +48,39 @@ metrics_output_dir = "data"
 for output_dir in metrics_output_dir, visualisation_output_dir:
     os.makedirs(output_dir, exist_ok=True)
 
-
-# <prometheus-url> : localhost:9090
-# <social-network-endpoint> : localhost:8082
-
-
-
-
-# Define Prometheus queries
 from prom_queries import PROMETHEUS_QUERIES
 
-
-
-# queries = {
-#     "network_receive": "rate(node_network_receive_bytes_total[1m])",
-#     "network_transmit": "rate(node_network_transmit_bytes_total[1m])"
-# }
-
 # Fetch metrics
-def fetch_metrics(prom:PrometheusConnect, query, start_time, end_time):
-    result = prom.custom_query_range(
-        query=query,
-        start_time=start_time,
-        end_time=end_time,
-        step="15s"
-    )
-    msg = f"Query: {query}, Start: {start_time}, End: {end_time}"
-
-    return result, msg
+def fetch_metrics(prom: PrometheusConnect, query, start_time=None, end_time=None):
+    try:
+        if "[5m]" in query or "[2m]" in query or "rate(" in query or "histogram_quantile(" in query:
+            result = prom.custom_query_range(
+                query=query,
+                start_time=start_time,
+                end_time=end_time,
+                step="15s"
+            )
+        else:
+            result = prom.custom_query(query)
+        return result, "OK"
+    except Exception as e:
+        return None, str(e)
 
 # Process data
 def process_metrics(result, msg):
     if not result:
-        print(msg, end="", flush=True)
+        print("Result is empty - msg from fetch:" + msg, end=" ", flush=True)
         return
-        # print(/)
-        # raise ValueError("No data returned from Prometheus query.")
-    
+
     data = []
     for metric in result:
-        values = metric["values"]
-        for timestamp, value in values:
+        # If it's a range query, it will contain a "values" key
+        if "values" in metric:
+            for timestamp, value in metric["values"]:
+                data.append({"timestamp": datetime.fromtimestamp(float(timestamp)), "value": float(value)})
+        # If it's an instant query, it will have a "value" key
+        elif "value" in metric:
+            timestamp, value = metric["value"]
             data.append({"timestamp": datetime.fromtimestamp(float(timestamp)), "value": float(value)})
     if data:
         return pd.DataFrame(data)
@@ -109,6 +112,8 @@ def plot_metrics(metrics_df, title, output_file=None):
 def run_wrk2_test(test_params):
     command_list = [
         f"{wrk2_dir}/wrk",
+        # "-D exp",
+        "-L",
         f"-t {test_params['threads']}",
         f"-c {test_params['connections']}",
         f"-d {test_params['duration']}",
@@ -130,7 +135,7 @@ def serve_visualizations(visualisation_output_dir, port=8082):
     os.chdir(visualisation_output_dir)
     handler = http.server.SimpleHTTPRequestHandler
     httpd = socketserver.TCPServer(("", port), handler)
-    print(f"Serving at http://localhost:{port}",flush=True)
+    print(f"Serving fat {nginx_url}",flush=True)
     httpd.serve_forever()
 
 def connect_to_prometheus():
@@ -146,6 +151,7 @@ def save_jaeger_network_map():
     with open(f"{network_map_filename}.json", "w") as f:
         json.dump(network_map, f, indent=4)
     visualize_network_map(network_map, f"{network_map_filename}.png")
+    return network_map
 
 def save_wrk2_outputs():
     print(f"[{get_current_utc_timestamp()}] Running wrk2 test with {test_params}... ", end="",flush=True)
@@ -154,6 +160,7 @@ def save_wrk2_outputs():
     with open(f"{visualisation_output_dir}/wrk2_output.json", "w") as f:
         json.dump(wrk2_output, f)
     print("Complete, output saved to ",f"{visualisation_output_dir}/wrk2_output.json",flush=True)
+    return wrk2_output
 
 def run_prom_requests(prom, prom_queries:Dict[str, str], start_time, end_time):
     # Fetch and process metrics for all queries
@@ -178,19 +185,96 @@ def run_prom_requests(prom, prom_queries:Dict[str, str], start_time, end_time):
         
         print(f"Visualization saved to {plot_file}.", flush=True)
 
+def extract_services_from_network_map(network_map):
+    """
+    Extracts unique service names from the Jaeger network map.
+    :param network_map: JSON object containing service dependency information.
+    :return: A set of unique service names.
+    """
+    services = set()
+    for dependency in network_map.get("data", []):
+        services.add(dependency["parent"])
+        services.add(dependency["child"])
+    return services
+
+def generate_prometheus_queries_for_services(services, base_queries):
+    service_queries = {}
+    for service in services:
+        service_queries[service] = {}
+        for metric_name, base_query in base_queries.items():
+            # Don't mutate regex-based queries for replicas
+            if metric_name.startswith("replicas_"):
+                service_queries[service][metric_name] = base_query
+            else:
+                service_queries[service][metric_name] = base_query.replace("pod=~", f'pod=~"{service}"')
+    return service_queries
+
+
+def save_metrics_and_visualizations(prom: PrometheusConnect, service_queries, start_time, end_time):
+    """
+    Fetches metrics for each service and saves data and visualizations.
+    :param prom: Prometheus connection object.
+    :param service_queries: Dictionary of Prometheus queries per service.
+    :param start_time: Start time for the metrics query.
+    :param end_time: End time for the metrics query.
+    """
+    for service, queries in service_queries.items():
+        # Create directories for data and visualizations
+        data_dir = f"data/{service}"
+        viz_dir = f"visualizations/{service}"
+        os.makedirs(data_dir, exist_ok=True)
+        os.makedirs(viz_dir, exist_ok=True)
+
+        for metric_name, query in queries.items():
+            print(f"Fetching metrics for service '{service}', metric '{metric_name}'...", flush=True)
+            metrics, msg = fetch_metrics(prom, query, start_time, end_time)
+
+            try:
+                metrics_df = process_metrics(metrics, msg)
+                if metrics_df is not None:
+                    # Save data as CSV
+                    csv_path = os.path.join(data_dir, f"{metric_name}.csv")
+                    metrics_df.to_csv(csv_path, index=False)
+                    print(f"Metrics data saved to {csv_path}", flush=True)
+
+                    # Create visualization
+                    plt.figure(figsize=(10, 6))
+                    sns.lineplot(x="timestamp", y="value", data=metrics_df, label="Metric Value")
+                    plt.title(f"{metric_name.replace('_', ' ').title()} - {service}")
+                    plt.xlabel("Timestamp")
+                    plt.ylabel("Value")
+                    plt.grid(True)
+                    plot_path = os.path.join(viz_dir, f"{metric_name}.png")
+                    plt.savefig(plot_path)
+                    plt.close()
+                    print(f"Visualization saved to {plot_path}", flush=True)
+                else:
+                    print(f"No metrics found for service '{service}', metric '{metric_name}'.", flush=True)
+            except Exception as e:
+                print(f"Error processing metrics for service '{service}', metric '{metric_name}': {e}", flush=True)
+            
+            time.sleep(1)
+
 def main():
     # Connect to Prometheus
     prom = connect_to_prometheus()
     
-    # Collect Jaeger map
-    save_jaeger_network_map()
-   
     # Run wrk2 tests 
-    start_time = datetime.now() - timedelta(seconds=10)
-    save_wrk2_outputs()
-    end_time = datetime.now() + timedelta(seconds=10)
+    start_time = datetime.now() - timedelta(seconds=BEFORE_AFTER_QUERY_LAG)
+    output_str = save_wrk2_outputs()
+    end_time = datetime.now() + timedelta(seconds=BEFORE_AFTER_QUERY_LAG)
+    print("Completed! \n", output_str[:326])
+    print(f"Now waiting for {BEFORE_AFTER_QUERY_LAG}s to allow time for prometheus scraping..")
+    time.sleep(BEFORE_AFTER_QUERY_LAG)
+    # Collect Jaeger map
+    network_dict = save_jaeger_network_map()
+    # Extract services from Jaeger network map
+    services = extract_services_from_network_map(network_dict)
+    print(f"Services extracted: {services}", flush=True)
+    
+    service_queries = generate_prometheus_queries_for_services(services, PROMETHEUS_QUERIES)
 
-    run_prom_requests(prom, PROMETHEUS_QUERIES, start_time, end_time)
+    save_metrics_and_visualizations(prom, service_queries, start_time, end_time)
 
 
 # Main workflow
