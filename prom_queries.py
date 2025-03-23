@@ -80,8 +80,7 @@ PROMETHEUS_QUERIES = {
     "cpu_usage_per_pod": r'sum(rate(container_cpu_usage_seconds_total[5m])) by (pod)',
 
     # Memory Usage per Pod
-    "memory_usage_per_pod": 'avg_over_time(container_memory_usage_bytes[5m]) by (pod)',
-
+    "memory_usage_per_pod": r'avg_over_time(container_memory_usage_bytes[5m]) by (pod)',
     # Network Traffic Received per Pod
     "network_receive": r'sum(rate(container_network_receive_bytes_total[5m])) by (pod)',
 

@@ -37,7 +37,7 @@ jaeger_url = os.environ.get("JAEGER_URL")
 test_params = {
     "threads": 1,
     "connections": 10,
-    "duration": "60s",
+    "duration": "120s",
     "rate": 80,
     "url": f"{nginx_url}/wrk2-api/post/compose"
 }
@@ -69,15 +69,18 @@ def fetch_metrics(prom: PrometheusConnect, query, start_time=None, end_time=None
 # Process data
 def process_metrics(result, msg):
     if not result:
-        print(msg, end="", flush=True)
+        print("Result is empty - msg from fetch:" + msg, end=" ", flush=True)
         return
-        # print(/)
-        # raise ValueError("No data returned from Prometheus query.")
-    
+
     data = []
     for metric in result:
-        values = metric["values"]
-        for timestamp, value in values:
+        # If it's a range query, it will contain a "values" key
+        if "values" in metric:
+            for timestamp, value in metric["values"]:
+                data.append({"timestamp": datetime.fromtimestamp(float(timestamp)), "value": float(value)})
+        # If it's an instant query, it will have a "value" key
+        elif "value" in metric:
+            timestamp, value = metric["value"]
             data.append({"timestamp": datetime.fromtimestamp(float(timestamp)), "value": float(value)})
     if data:
         return pd.DataFrame(data)
