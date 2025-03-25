@@ -159,7 +159,8 @@ fi
 
 # 1️⃣3️⃣ Build WRK2 in the Correct Directory
 echo "⚙️ Building WRK2..."
-cd ~/projects/DeathStarBench/wrk2/wrk2
+cd ~/projects/DeathStarBench/wrk2/
+git submodule update --init --recursivesudo apt-get update
 make
 echo "✅ WRK2 built successfully."
 
