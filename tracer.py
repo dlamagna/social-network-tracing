@@ -25,7 +25,7 @@ BEFORE_AFTER_QUERY_LAG = 20
 # 1. install wrk
 # 2. have jaeger, prometheus, nginx port forward terminals open
 
-wrk2_dir = "~/projects/DeathStarBench/wrk2/wrk2/"
+wrk2_dir = "~/projects/DeathStarBench/wrk2/"
 wrk2_script = "~/projects/DeathStarBench/socialNetwork/wrk2/scripts/social-network/compose-post.lua"
 
 # # Fetch URLs from environment variables
@@ -37,8 +37,8 @@ jaeger_url = os.environ.get("JAEGER_URL")
 test_params = {
     "threads": 1,
     "connections": 10,
-    "duration": "120s",
-    "rate": 80,
+    "duration": "600s",
+    "rate": 50,
     "url": f"{nginx_url}/wrk2-api/post/compose"
 }
 
@@ -112,8 +112,8 @@ def plot_metrics(metrics_df, title, output_file=None):
 def run_wrk2_test(test_params):
     command_list = [
         f"{wrk2_dir}/wrk",
-        # "-D exp",
-        "-L",
+        "-D exp",
+        "-p",
         f"-t {test_params['threads']}",
         f"-c {test_params['connections']}",
         f"-d {test_params['duration']}",
