@@ -15,3 +15,5 @@ aggregate/*
 !aggregate/.gitkeep
 tmp/
 dev/
+
+istio-system-installation/fetch_node_ports.sh
