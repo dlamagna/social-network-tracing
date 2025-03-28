@@ -3,14 +3,24 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
-echo "🌐 Fetching Node IPs and NodePorts..."
-USER="dlamagna"
-SERVER=""
-PORT=""
-# Set correct namespaces
-DEATHSTAR_NAMESPACE="socialnetwork"
-ISTIO_NAMESPACE="istio-system"
+# Load environment variables from the .env file if it exists
+if [ -f .env ]; then
+    # Export all variables from the file
+    set -a
+    source .env
+    set +a
+else
+    echo ".env file not found. Exiting."
+    exit 1
+fi
 
+echo "🌐 Fetching Node IPs and NodePorts..."
+# Now the variables are loaded from the .env file
+echo "User: $USER"
+echo "Server: $SERVER"
+echo "Port: $PORT"
+echo "Deathstar Namespace: $DEATHSTAR_NAMESPACE"
+echo "Istio Namespace: $ISTIO_NAMESPACE"
 # Get the Node IP
 NODE_IP=$(sudo kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
 

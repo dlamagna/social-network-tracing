@@ -6,6 +6,7 @@ __pycache__/
 venv/
 node_modules/
 .venv/
+.env
 
 data/*
 !data/.gitkeep
@@ -15,5 +16,3 @@ aggregate/*
 !aggregate/.gitkeep
 tmp/
 dev/
-
-istio-system-installation/fetch_node_ports.sh
