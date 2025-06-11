@@ -1,78 +1,149 @@
-This directory contains scripts for installing, configuring, and managing DeathStarBench-related monitoring and networking components, including **Prometheus, Grafana, Istio, and Kiali**.
+# Installation Scripts Documentation
 
----
+This directory contains scripts for setting up and managing the social network monitoring environment. Below is a detailed breakdown of each script and its functionality.
 
-### **1. `reinstall_deathstar.sh`**
-- **Purpose:** Performs a **full purge and reinstallation** of DeathStarBench and its monitoring stack (**Prometheus, Grafana, and WRK2**).
-- **Key Features:**
-  - **Uninstalls and reinstalls DeathStarBench** (Social Network microservices). This includes uninstallation of the loader module wrk2.
-  - **Cleans and recreates the `monitoring` namespace** for Prometheus and Grafana.
-  - **Deploys Prometheus and Grafana as NodePort services** for external access.
-  - **Builds WRK2** (load testing tool) from source.
-  - **Ensures stuck pods are restarted** to avoid initialization issues.
-  - **Fetches NodePort URLs** for key services like **NGINX, Prometheus, Jaeger, and Grafana**.
+## Scripts Overview
 
----
+### 1. `reinstall_deathstar.sh`
+The main installation script that sets up the entire environment.
 
-### **2. `install_istio_kiali.sh`**
-- **Purpose:** Installs **Istio** and **Kiali** in the `monitoring` namespace.
-- **Key Features:**
-  - Installs Istio via **Helm**.
-  - Deploys Istio **Ingress Gateway** using **NodePort**.
-  - Enables automatic sidecar injection for services in `monitoring`.
-  - Configures **Kiali** to use **Prometheus** as its backend.
-  - Ensures all pods are running before proceeding.
+**Features:**
+- Installs/updates DeathStarBench social network application
+- Deploys Istio service mesh
+- Sets up monitoring stack (Prometheus, Grafana, Jaeger)
+- Configures Kiali for service mesh visualization
+- Exposes services as NodePorts
 
----
+**Namespaces:**
+- `socialnetwork`: For the social network application
+- `istio-system`: For Istio and monitoring tools
 
-### **3. `uninstall_istio_kiali.sh`**
-- **Purpose:** Uninstalls **Istio** and **Kiali** from the `monitoring` namespace.
-- **Key Features:**
-  - Deletes **Kiali** using its official YAML configuration.
-  - Uninstalls Istio components (`istio-ingress`, `istiod`, `istio-base`) via **Helm**.
-  - Cleans up Istio **Custom Resource Definitions (CRDs)**.
-  - Removes Istio-related namespace labels.
+**Services and Ports:**
+- NGINX: NodePort (dynamic)
+- Prometheus: NodePort (dynamic)
+- Grafana: NodePort (dynamic)
+- Jaeger: NodePort (dynamic)
+- Kiali: NodePort (dynamic)
+- Istio Ingress Gateway: NodePort (dynamic)
 
----
+### 2. `install_istio_kiali.sh`
+Installs Istio and Kiali with specific configurations.
 
-### **4. `fetch_ports.sh`**
-- **Purpose:** Retrieves **NodePort** values for key services and exports them as environment variables.
-- **Key Features:**
-  - Fetches **NodePort** values for:
-    - **NGINX (Social Network Frontend)**
-    - **Prometheus**
-    - **Jaeger**
-    - **Grafana**
-    - **Kiali**
-    - **Istio Ingress Gateway**
-  - Provides an **SSH command** for port forwarding.
-  - Outputs **local access URLs** for services after SSH forwarding.
+**Features:**
+- Installs latest Istio version
+- Configures Istio with demo profile
+- Sets up Kiali with anonymous authentication
+- Enables telemetry and tracing
+- Configures service mesh visualization
 
----
+**Components:**
+- Istio Control Plane
+- Kiali Dashboard
+- Jaeger Tracing
+- Prometheus Integration
 
-### **5. `py_fetch_ports.sh`**
-- **Purpose:** A simplified version of `fetch_ports.sh`, outputting only the **service URLs** without additional logging.
-- **Key Features:**
-  - Fetches and prints **NodePort** mappings for **NGINX, Prometheus, Jaeger, Grafana, Kiali, and Istio Ingress Gateway**.
-  - Designed for integration with Python scripts.
+### 3. `uninstall_istio_kiali.sh`
+Cleanup script for removing Istio and Kiali.
 
----
+**Actions:**
+- Removes Istio installation
+- Uninstalls Kiali
+- Cleans up related resources
+- Removes webhook configurations
 
-## **How Services are Deployed**
-- **Namespace:** All monitoring services (**Prometheus, Grafana, Istio, Kiali**) are installed in the **`monitoring` namespace**.
-- **Access:** The services are exposed via **NodePort**, making them accessible on the cluster nodes.
+### 4. Port Management Scripts
 
-## **Usage Example**
-To reinstall DeathStarBench and monitoring services:
+#### a. `fetch_node_ports.sh`
+Comprehensive script for managing service endpoints.
+
+**Features:**
+- Fetches all service NodePorts
+- Sets up SSH port forwarding
+- Exports environment variables
+- Provides localhost URLs
+- Handles service patching
+
+**Environment Variables:**
 ```bash
-chmod +x reinstall_deathstar.sh
-./reinstall_deathstar.sh
+NGINX_URL=http://<node-ip>:<port>
+PROMETHEUS_URL=http://<node-ip>:<port>
+JAEGER_URL=http://<node-ip>:<port>
+GRAFANA_URL=http://<node-ip>:<port>
+KIALI_URL=http://<node-ip>:<port>
+ISTIO_INGRESS_URL=http://<node-ip>:<port>
 ```
 
-To fetch service URLs after installation:
+#### b. `py_fetch_ports.sh`
+Lightweight version for Python integration.
 
-```bash
-source fetch_ports.sh
-echo $PROMETHEUS_URL
-echo $GRAFANA_URL
-```
+**Features:**
+- Collects core service NodePorts
+- Outputs clean URL format
+- Used by Python monitoring scripts
+
+#### c. `fetch_ports.sh`
+Alternative port fetching script with additional features.
+
+**Features:**
+- Service endpoint discovery
+- Port verification
+- Environment variable setup
+
+### 5. `kind-config.yaml`
+Kubernetes in Docker (Kind) configuration file.
+
+**Features:**
+- Defines cluster configuration
+- Sets up node specifications
+- Configures networking
+
+## Installation Process
+
+1. **Initial Setup:**
+   ```bash
+   ./reinstall_deathstar.sh
+   ```
+
+2. **Port Configuration:**
+   ```bash
+   ./fetch_node_ports.sh
+   ```
+
+3. **Environment Variables:**
+   Create a `.env` file with:
+   ```bash
+   USER=<ssh-username>
+   SERVER=<remote-host>
+   PORT=<ssh-port>
+   DEATHSTAR_NAMESPACE=socialnetwork
+   ISTIO_NAMESPACE=istio-system
+   ```
+
+## Monitoring Stack Components
+
+### Prometheus
+- Metrics collection
+- Service monitoring
+- Performance tracking
+
+### Grafana
+- Metrics visualization
+- Dashboard creation
+- Performance analysis
+
+### Jaeger
+- Distributed tracing
+- Request tracking
+- Service dependency mapping
+
+### Kiali
+- Service mesh visualization
+- Traffic monitoring
+- Configuration management
+
+## Notes
+- All services are exposed as NodePort for easy access
+- Scripts include automatic cleanup of previous installations
+- Remote access is configured through SSH port forwarding
+- Environment variables are used for service discovery
+- Monitoring tools are integrated with Istio service mesh 
